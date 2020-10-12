@@ -53,6 +53,7 @@ architecture Behavioral of acc_calc_ip is
   signal address_reg, address_next : std_logic_vector(3 downto 0);      --Internal buffer addressing register
   signal valid_out_reg, valid_out_next : std_logic_vector(1 downto 0);  --Register used to offset _valid signals due to pipelining
   signal tlast_reg, tlast_next : std_logic;
+  signal last_pulse_reg, last_pulse_next : std_logic;
   
   --Registers for storing results during arithmetic operations
   signal r1_reg, r1_next : std_logic_vector(19 downto 0); 
@@ -88,6 +89,7 @@ begin
       file_x_reg <= (others =>(others => '0'));
       file_y_reg <= (others =>(others => '0'));
       tlast_reg <= '0';
+      last_pulse_reg <= '0';
     elsif clk'event and clk = '1' then  -- rising clock edge
       state_reg <= state_next;
       theta_reg <= theta_next;
@@ -102,11 +104,12 @@ begin
       file_x_reg <= file_x_next;
       file_y_reg <= file_y_next;
       tlast_reg <= tlast_next;
+      last_pulse_reg <= last_pulse_next;
     end if;
   end process reg_process;
   
   sequential_logic : process(m_ready, s_valid, state_reg, theta_reg, areset, s_last, address_reg, data_out_reg, valid_out_reg, 
-                             r1_reg, r2_reg, s_data_in, radius_reg, r1_sin_res_s, r2_cos_res_s, b_q_s, a_q_s, file_x_reg, file_y_reg ) is
+                             r1_reg, r2_reg, tlast_reg, last_pulse_reg, s_data_in, radius_reg, r1_sin_res_s, r2_cos_res_s, b_q_s, a_q_s, file_x_reg, file_y_reg ) is
   begin
     -- default assignments
     state_next <= state_reg;
@@ -125,6 +128,7 @@ begin
     sin_next <= sin_reg;
     cos_next <= cos_reg;
     tlast_next <= tlast_reg;
+    last_pulse_next <= last_pulse_reg;
     
     case state_reg is
       --a state entered after an asynchronous reset
@@ -147,6 +151,12 @@ begin
             --manipulation of the address register
             if((address_reg = "1111") or (s_last = '1')) then
               state_next <= s2mm;
+              
+              if(s_last = '1') then
+                last_pulse_next <= '1';
+              else
+                last_pulse_next <= '0';
+              end if;
             else
               address_next <= std_logic_vector(unsigned(address_reg) + 1); 
             end if; 
@@ -184,11 +194,14 @@ begin
           --state change after all buffers data has been processed or new data from bafers has been processed
           if(theta_reg = "0000000010" and valid_out_reg = "11") then
             if(address_reg = "0000" and tlast_reg = '1') then
-              m_last <= '1';
               state_next <= mm2s;
               theta_next <= (others => '0');
               valid_out_next <= (others => '0');
               tlast_next <= '0';
+              
+              if(last_pulse_reg = '1') then
+                m_last <= '1';
+              end if;
             end if;
           end if;
 

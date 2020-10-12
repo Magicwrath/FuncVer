@@ -29,7 +29,8 @@ class acc_calc_scoreboard extends uvm_scoreboard;
 
    bit buffer_full;             // bit that indicates that the input buffer should not recieve
                                 // any new data until the results are calculated for the pixels in the buffer
-   
+                            
+   bit last_pulse = 1'b0;       //indicates whether the last pulse is sent
    //queues to hold the master/slave AXI DMA transactions
    acc_calc_master_seq_item duv_rcvd_pkt_que[$]; // DUV recieved - DMA is the master
    acc_calc_slave_seq_item duv_sent_pkt_que[$];  // DUV sent - DMA is the slave
@@ -94,6 +95,11 @@ class acc_calc_scoreboard extends uvm_scoreboard;
          //check if the buffer is full
          if(duv_rcvd_pkt_que.size() == 16 || tr_clone.s00_axis_tlast == 1'b1)
            buffer_full = 1'b1;
+           
+         if(tr_clone.s00_axis_tlast == 1'b1)
+           last_pulse = 1'b1;
+         else
+           last_pulse = 1'b0;
       end
    endfunction : write_master_tr
 
@@ -171,17 +177,21 @@ class acc_calc_scoreboard extends uvm_scoreboard;
             end //end of CHECK 1.5
 
             if(num_of_slave_tr == expected_num_of_tr) begin
-               //CHECK 1.4 - check if the DUV sets m00_axis_tlast on every finished buffer
-               master_tlast_asrt : assert(tr_clone.m00_axis_tlast == 1'b1) begin
-                  //pass block
-                  `uvm_info(get_full_name(), "m00_axis_tlast is set properly", UVM_HIGH)
+               num_of_slave_tr = 0;
+               
+               if(last_pulse == 1'b1) begin
+                 //CHECK 1.4 - check if the DUV sets m00_axis_tlast on every finished buffer
+                 master_tlast_asrt : assert(tr_clone.m00_axis_tlast == 1'b1) begin
+                    //pass block
+                    `uvm_info(get_full_name(), "m00_axis_tlast is set properly", UVM_HIGH)
 
-                  //reset the num_of_slave_tr counter to 0
-                  num_of_slave_tr = 0;
-               end else begin
-                  //fail block
-                  `uvm_error(get_full_name(), "m00_axis_tlast isn't set properly")
-               end //end of CHECK 1.4
+                    //reset the num_of_slave_tr counter to 0
+                    num_of_slave_tr = 0;
+                 end else begin
+                    //fail block
+                    `uvm_error(get_full_name(), "m00_axis_tlast isn't set properly")
+                 end //end of CHECK 1.4
+               end
             end //end of if(num_of_slave_tr == expected_num_of_tr)
             else begin
                //push out the next pixel to be verified, after 360 verified points
